@@ -33,9 +33,11 @@ class DatabaseManager:
     
     @contextmanager
     def get_connection(self):
-        """Context manager for database connections."""
-        conn = sqlite3.connect(self.db_path)
+        """Context manager for database connections with WAL mode for concurrent access."""
+        conn = sqlite3.connect(self.db_path, timeout=10)
         conn.row_factory = sqlite3.Row
+        # Enable WAL mode for better concurrent access (as per developer guide)
+        conn.execute("PRAGMA journal_mode=WAL")
         try:
             yield conn
             conn.commit()

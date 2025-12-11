@@ -20,6 +20,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Global model cache to avoid reloading on every instantiation (as per developer guide)
+_model_cache = {
+    'sentiment_pipeline': None,
+    'ner_pipeline': None
+}
+
 
 class SentimentAnalyzer:
     """
@@ -29,32 +35,46 @@ class SentimentAnalyzer:
     
     def __init__(self, model_name: str = "distilbert-base-uncased-finetuned-sst-2-english"):
         """
-        Initialize sentiment analyzer.
+        Initialize sentiment analyzer with global model caching.
         
         Args:
             model_name: HuggingFace model identifier
         """
+        global _model_cache
+        
         self.model_name = model_name
         self.device = "cuda" if TRANSFORMERS_AVAILABLE and torch.cuda.is_available() else "cpu"
         
         if TRANSFORMERS_AVAILABLE:
             try:
-                logger.info(f"Loading model: {model_name} on {self.device}")
-                self.sentiment_pipeline = pipeline(
-                    "sentiment-analysis",
-                    model=model_name,
-                    device=0 if self.device == "cuda" else -1
-                )
-                logger.info("Sentiment pipeline loaded successfully")
+                # Use cached models if available (developer guide recommendation)
+                if _model_cache['sentiment_pipeline'] is None:
+                    logger.info(f"Loading model: {model_name} on {self.device}")
+                    _model_cache['sentiment_pipeline'] = pipeline(
+                        "sentiment-analysis",
+                        model=model_name,
+                        device=0 if self.device == "cuda" else -1
+                    )
+                    logger.info("Sentiment pipeline loaded and cached successfully")
+                else:
+                    logger.info("Using cached sentiment pipeline")
                 
-                # Load NER pipeline for entity extraction
-                self.ner_pipeline = pipeline(
-                    "ner",
-                    model="dslim/bert-base-NER",
-                    device=0 if self.device == "cuda" else -1,
-                    aggregation_strategy="simple"
-                )
-                logger.info("NER pipeline loaded successfully")
+                self.sentiment_pipeline = _model_cache['sentiment_pipeline']
+                
+                # Load NER pipeline for entity extraction (cached)
+                if _model_cache['ner_pipeline'] is None:
+                    logger.info("Loading NER model")
+                    _model_cache['ner_pipeline'] = pipeline(
+                        "ner",
+                        model="dslim/bert-base-NER",
+                        device=0 if self.device == "cuda" else -1,
+                        aggregation_strategy="simple"
+                    )
+                    logger.info("NER pipeline loaded and cached successfully")
+                else:
+                    logger.info("Using cached NER pipeline")
+                
+                self.ner_pipeline = _model_cache['ner_pipeline']
                 
             except Exception as e:
                 logger.error(f"Error loading transformers model: {e}")
